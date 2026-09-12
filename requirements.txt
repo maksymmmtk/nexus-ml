@@ -1,0 +1,8 @@
+fastapi>=0.110.0
+uvicorn>=0.27.1
+onnxruntime>=1.17.1
+redis>=5.0.3
+minio>=7.2.5
+prometheus-fastapi-instrumentator>=7.0.0
+pytest>=8.0.2
+pydantic>=2.6.3
