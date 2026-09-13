@@ -1,0 +1,51 @@
+services:
+  api:
+    build: .
+    container_name: nexusml_api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - minio
+      - redis
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: nexusml_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: nexusml_redis
+    ports:
+      - "6379:6379"
+
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: nexusml_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:10.3.3
+    container_name: nexusml_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+
+volumes:
+  minio_data:
