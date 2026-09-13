@@ -33,7 +33,7 @@ jobs:
 
     - name: Run Pytest
       run: |
-        pytest -v tests/
+        python -m pytest -v tests/
 
   build-image:
     runs-on: ubuntu-latest
