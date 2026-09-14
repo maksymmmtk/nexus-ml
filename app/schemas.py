@@ -1,13 +1,10 @@
 from pydantic import BaseModel, Field
 
 class PredictRequest(BaseModel):
-    features: list[float] = Field(
-        ..., 
-        min_length=4, 
-        max_length=4, 
-        json_schema_extra={"example": [5.1, 3.5, 1.4, 0.2]}
-    )
+    model_name: str = Field(..., description="Model name (e.g., iris_v1.onnx)")
+    features: list[float] = Field(..., min_length=1)
 
 class PredictResponse(BaseModel):
+    model_used: str
     predicted_class: int
     status: str = "success"
