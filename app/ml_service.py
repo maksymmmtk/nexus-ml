@@ -3,7 +3,7 @@ import numpy as np
 
 class MLModelService:
     def __init__(self):
-        self.session = {} # Dictionary: {"iris_v1.onnx": session_object, "diabetes.onnx": session_object}
+        self.sessions = {} # Dictionary: {"iris_v1.onnx": session_object, "diabetes.onnx": session_object}
 
     def get_loaded_models(self) -> list[str]:
         return list(self.sessions.keys())
@@ -19,7 +19,7 @@ class MLModelService:
     def unload_model(self, model_name: str) -> bool:
         if model_name in self.sessions:
             del self.sessions[model_name]
-            print(f"Model {model_name} unloaded form memory.")
+            print(f"Model {model_name} unloaded from memory.")
             return True
         return False
 

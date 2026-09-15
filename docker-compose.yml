@@ -5,21 +5,9 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - minio
       - redis
-
-  minio:
-    image: quay.io/minio/minio:latest
-    container_name: nexusml_minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      - MINIO_ROOT_USER=admin
-      - MINIO_ROOT_PASSWORD=password123
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
+    env_file:
+      - .env
 
   redis:
     image: redis:7-alpine
@@ -46,6 +34,9 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     depends_on:
       - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
 
 volumes:
-  minio_data:
+  grafana_data:
