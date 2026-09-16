@@ -1,83 +1,71 @@
+import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from prometheus_fastapi_instrumentator import Instrumentator
 from app.model_loader import download_model_from_s3
 from app.ml_service import ml_service
 from app.schemas import PredictRequest, PredictResponse
 from app.cache import redis_client, get_cache_key
-from app.model_loader import list_models_in_s3
+
+TARGET_MODEL = os.getenv("MODEL_NAME")
 
 
-app = FastAPI(title="NexusML API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
+    if not TARGET_MODEL:
+        raise RuntimeError("CRITICAL: MODEL_NAME environment variable is missing!")
+        
+    model_path, manifest_path = download_model_from_s3(TARGET_MODEL)
+    if not model_path or not manifest_path:
+        raise RuntimeError(f"CRITICAL: Failed to load {TARGET_MODEL} from S3 production/")
+        
+    ml_service.load_model(TARGET_MODEL, model_path, manifest_path)
+    yield
+    # Shutdown logic
+    print("Shutting down container...")
+
+app = FastAPI(title=f"NexusML API - {TARGET_MODEL}", lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
-
-
-@app.get("/")
-async def root():
-    return {"message": "NexusML API is running"}
-
-
-@app.get("/models")
-async def get_available_models():
-    models = list_models_in_s3()
-    return {"available_models": models, "total_count": len(models)}
-
-
-@app.get("/models/active")
-async def get_active_models():
-    active = ml_service.get_loaded_models()
-    return {"active_models": active, "total_count": len(active)}
 
 
 @app.post("/predict", response_model=PredictResponse)
 async def predict(request: PredictRequest):
-    model_name = request.model_name
+    cache_key = get_cache_key(TARGET_MODEL, request.features)
+    cached_result = None
     
     # 1. Redis cache check
-    cache_key = get_cache_key(model_name, request.features)
-    cached_result = redis_client.get(cache_key)
-    
+    try:
+        cached_result = redis_client.get(cache_key)
+    except Exception as e:
+        print(f"Redis is unavailable for GET: {e}")
+
     if cached_result:
         return PredictResponse(
-            model_used=model_name,
-            predicted_class=int(cached_result), 
+            model_used=TARGET_MODEL,
+            prediction=float(cached_result), 
             status="success (from cache)"
         )
-        
-    # 2. Checking for the presence of the model in RAM
-    if not ml_service.is_loaded(model_name):
-        # 3. "On-the-fly" loading from MinIO (Lazy Loading)
-        local_path = download_model_from_s3(model_name)
-        if not local_path:
-            raise HTTPException(status_code=404, detail=f"Model {model_name} not found in MinIO")
-        ml_service.load_model(model_name, local_path)
 
-    # 4. Inference
+    # 2. Inference
     try:
-        prediction = ml_service.predict(model_name, request.features)
-        redis_client.setex(cache_key, 3600, prediction)
+        prediction = ml_service.predict(request.features)
+        
+        # 3. Redis cache save
+        try:
+            redis_client.setex(cache_key, 3600, prediction)
+        except Exception as e:
+            print(f"Redis is unavailable for SET: {e}")
+            
         return PredictResponse(
-            model_used=model_name,
-            predicted_class=prediction, 
+            model_used=TARGET_MODEL,
+            prediction=prediction, 
             status="success (computed)"
         )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.delete("/models/{model_name}/unload")
-async def unload_model(model_name: str):
-    if ml_service.unload_model(model_name):
-        return {"message": f"Model {model_name} successfully unloaded from RAM"}
-    raise HTTPException(status_code=404, detail="Model not found in memory")
-
-
-@app.delete("/cache/clear")
-async def clear_redis_cache():
-    try:
-        redis_client.flushdb()
-        return {"message": "Redis cache cleared successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Cache clearing error: {e}")
 
 
 @app.get("/health")
@@ -88,9 +76,11 @@ async def deep_health_check():
         redis_status = "error"
    
     return {
-        "status": "healthy" if redis_status == "connected" else "degraded",
+        "status": "healthy" if redis_status == "connected" and ml_service.is_loaded() else "degraded",
+        "model": TARGET_MODEL,
         "services": {
             "api": "connected",
-            "redis": redis_status
+            "redis": redis_status,
+            "model_loaded": ml_service.is_loaded()
         }
     }

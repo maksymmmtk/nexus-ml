@@ -1,13 +1,15 @@
 services:
   api:
     build: .
-    container_name: nexusml_api
+    container_name: nexusml_api_${MODEL_ID}
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
       - redis
     env_file:
       - .env
+    environment:
+      - MODEL_NAME=${MODEL_FILE_NAME}
 
   redis:
     image: redis:7-alpine

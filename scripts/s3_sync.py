@@ -14,7 +14,7 @@ PROD_PREFIX = "production/"
 s3 = boto3.client('s3', region_name=REGION)
 
 def upload_staging():
-    print(f"Simulating DS workflow: Uploading local models to S3 ({STAGING_PREFIX})...")
+    print(f"Uploading local models to S3 ({STAGING_PREFIX})...")
     if not os.path.exists(LOCAL_STAGING_DIR):
         print("Warning: Local staging directory is empty. Run scripts/train_model.py first.")
         return

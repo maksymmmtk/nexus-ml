@@ -1,7 +1,7 @@
-name: Model Validation and CD
+name: Model CI/CD Pipeline
 
 on:
-  workflow_dispatch: # Allows manual triggering from the GitHub UI
+  workflow_dispatch: # Allows manual start
 
 jobs:
   validate-and-deploy:
@@ -40,7 +40,7 @@ jobs:
         run: pytest tests/test_model.py -v
 
       - name: Promote Models to Production (S3)
-        if: success() # This step runs ONLY if the pytest step passed
+        if: success()
         env:
           AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
         run: python scripts/s3_sync.py promote
