@@ -29,6 +29,11 @@ app = FastAPI(title=f"NexusML API - {TARGET_MODEL}", lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
 
 
+@app.get("/")
+async def root():
+    return {"message": f"NexusML API for {TARGET_MODEL} is running"}
+
+
 @app.post("/predict", response_model=PredictResponse)
 async def predict(request: PredictRequest):
     cache_key = get_cache_key(TARGET_MODEL, request.features)
