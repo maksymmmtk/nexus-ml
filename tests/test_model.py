@@ -5,11 +5,9 @@ import pytest
 import onnxruntime as ort
 import numpy as np
 
-# У CI/CD сюди будуть завантажені файли зі staging-бакета
 MODELS_DIR = os.getenv("MODELS_DIR", "./scripts/staging")
 
 def get_model_test_cases():
-    """Сканує папку, знаходить .onnx файли та їхні .json маніфести"""
     test_cases = []
     if not os.path.exists(MODELS_DIR):
         return test_cases
@@ -19,18 +17,16 @@ def get_model_test_cases():
             model_path = os.path.join(MODELS_DIR, file)
             manifest_path = os.path.join(MODELS_DIR, file.replace(".onnx", ".json"))
             
-            # Додаємо в тести тільки якщо у моделі є супутній маніфест
             if os.path.exists(manifest_path):
                 with open(manifest_path, "r") as f:
                     config = json.load(f)
-                # Додаємо назву файлу для гарного виводу в консоль
                 test_cases.append(pytest.param(model_path, config, id=file))
                 
     return test_cases
 
 pytestmark = pytest.mark.skipif(
     not get_model_test_cases(), 
-    reason=f"Не знайдено жодної пари (.onnx + .json) у папці {MODELS_DIR}"
+    reason=f"No (.onnx + .json) pair found in the folder {MODELS_DIR}"
 )
 
 @pytest.mark.parametrize("model_path, config", get_model_test_cases())
@@ -42,7 +38,7 @@ def test_model_architecture_and_prediction(model_path, config):
     actual_features = inputs[0].shape[1]
     expected_features = config["expected_features"]
     assert actual_features == expected_features, \
-        f"{model_path}: Очікувалось {expected_features} фічей, отримано {actual_features}"
+        f"{model_path}: Expected {expected_features} features, recieved {actual_features}"
     
     # 2. Accuracy Check
     test_input = np.array([config["test_input"]], dtype=np.float32)
@@ -53,7 +49,7 @@ def test_model_architecture_and_prediction(model_path, config):
     expected_val = float(config["expected_class"])
     
     assert predicted_val == pytest.approx(expected_val, rel=1e-3), \
-        f"{model_path}: Очікувалося {expected_val}, отримано {predicted_val}"
+        f"{model_path}: Expected {expected_val}, recieved {predicted_val}"
 
 @pytest.mark.parametrize("model_path, config", get_model_test_cases())
 def test_model_latency(model_path, config):
@@ -68,4 +64,4 @@ def test_model_latency(model_path, config):
     
     avg_latency_ms = ((end_time - start_time) / 50) * 1000
     assert avg_latency_ms < config["max_latency_ms"], \
-        f"{model_path}: Інференс {avg_latency_ms:.2f} мс перевищує ліміт"
+        f"{model_path}: Inference {avg_latency_ms:.2f} ms exceeds the limit"
