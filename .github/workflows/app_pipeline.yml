@@ -168,3 +168,27 @@ jobs:
           service: nexusml-api-${{ matrix.model_name }}-service
           cluster: nexusml-cluster
           wait-for-service-stability: true
+
+      - name: Send Deployment Email Notification
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Deployment complete: nexusml-api-${{ matrix.model_name }}"
+          to: ${{ secrets.MAIL_USERNAME }}
+          from: NexusML CI/CD
+          body: |
+            Deploy status: ${{ job.status }}
+            Model: ${{ matrix.model_name }}
+            
+            The service has been successfully deployed (or updated) on AWS ECS Fargate.
+            
+            Service management in the AWS Console:
+            https://${{ env.AWS_REGION }}.console.aws.amazon.com/ecs/v2/clusters/nexusml-cluster/services/nexusml-api-${{ matrix.model_name }}-service/health?region=${{ env.AWS_REGION }}
+            
+            Pipeline details:
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
