@@ -137,6 +137,30 @@ jobs:
           container-name: api
           image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
+            - name: Register Task Def and Create Service if not exists
+        run: |
+          SERVICE_NAME="nexusml-api-${{ matrix.model_name }}-service"
+          FAMILY_NAME="nexusml-api-${{ matrix.model_name }}"
+          CLUSTER="nexusml-cluster"
+          
+          TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://task-def.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered Task Definition: $TASK_DEF_ARN"
+          
+          STATUS=$(aws ecs describe-services --cluster $CLUSTER --services $SERVICE_NAME --query "services[0].status" --output text)
+          
+          if [ "$STATUS" == "None" ] || [ "$STATUS" == "INACTIVE" ]; then
+            echo "Service $SERVICE_NAME does not exist. Creating automatically..."
+            aws ecs create-service \
+              --cluster $CLUSTER \
+              --service-name $SERVICE_NAME \
+              --task-definition $TASK_DEF_ARN \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-05b51248c23c0fe2c,subnet-0253e574f45955295,subnet-070badba59fd05cd8],securityGroups=[sg-0cafc2af14168a4b1],assignPublicIp=ENABLED}"
+          else
+            echo "Service exists ($STATUS). Skipping creation, handing over to deploy action..."
+          fi
+
       - name: Deploy Service to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
