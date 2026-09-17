@@ -1,12 +1,44 @@
 name: Model CI/CD Pipeline
 
 on:
-  workflow_dispatch: # Allows manual start
+  workflow_dispatch: # Manual Start
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REPOSITORY: nexusml-api
 
 jobs:
-  validate-and-deploy:
+  prepare-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      models: ${{ steps.set-matrix.outputs.models }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
+      - name: Fetch staging models from S3
+        id: set-matrix
+        env:
+          AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
+        run: |
+          FILES=$(aws s3api list-objects-v2 --bucket $AWS_BUCKET_NAME --prefix staging/ --query "Contents[?ends_with(Key, '.onnx')].Key" --output text)
+          if [ "$FILES" == "None" ] || [ -z "$FILES" ]; then
+            echo "models=[]" >> $GITHUB_OUTPUT
+          else
+            MODELS=$(echo "$FILES" | tr '\t' '\n' | sed 's/staging\///g' | sed 's/_model\.onnx//g' | sed 's/\.onnx//g')
+            JSON_ARRAY=$(echo "$MODELS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            echo "models=$JSON_ARRAY" >> $GITHUB_OUTPUT
+          fi
+
+  validate-and-promote:
+    runs-on: ubuntu-latest
+    needs: prepare-matrix
+    if: ${{ needs.prepare-matrix.outputs.models != '[]' }} 
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,7 +59,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-central-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Download models from Staging (S3)
         env:
@@ -44,3 +76,71 @@ jobs:
         env:
           AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
         run: python scripts/s3_sync.py promote
+
+  deploy-models:
+    runs-on: ubuntu-latest
+    needs: [prepare-matrix, validate-and-promote]
+    if: ${{ needs.prepare-matrix.outputs.models != '[]' }}
+    environment: production # Manual Approval
+    strategy:
+      matrix:
+        model_name: ${{ fromJson(needs.prepare-matrix.outputs.models) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Inject Dynamic Values into Task Definition
+        run: |
+          sed "s/__MODEL_NAME__/${{ matrix.model_name }}_model.onnx/g" task-def-template.json > task-def.json
+          sed -i "s/__FAMILY_NAME__/nexusml-api-${{ matrix.model_name }}/g" task-def.json
+
+      - name: Render Task Def
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: api
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+      
+      - name: Register Task Def and Create Service if not exists
+        run: |
+          SERVICE_NAME="nexusml-api-${{ matrix.model_name }}-service"
+          FAMILY_NAME="nexusml-api-${{ matrix.model_name }}"
+          CLUSTER="nexusml-cluster"
+          
+          TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://task-def.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered Task Definition: $TASK_DEF_ARN"
+          
+          STATUS=$(aws ecs describe-services --cluster $CLUSTER --services $SERVICE_NAME --query "services[0].status" --output text)
+          
+          if [ "$STATUS" == "None" ] || [ "$STATUS" == "INACTIVE" ]; then
+            echo "Service $SERVICE_NAME does not exist. Creating automatically..."
+            aws ecs create-service \
+              --cluster $CLUSTER \
+              --service-name $SERVICE_NAME \
+              --task-definition $TASK_DEF_ARN \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-05b51248c23c0fe2c,subnet-0253e574f45955295,subnet-070badba59fd05cd8],securityGroups=[sg-0cafc2af14168a4b1],assignPublicIp=ENABLED}"
+          else
+            echo "Service exists ($STATUS). Skipping creation, handing over to deploy action..."
+          fi
+
+      - name: Deploy Service to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: nexusml-api-${{ matrix.model_name }}-service
+          cluster: nexusml-cluster
+          wait-for-service-stability: true

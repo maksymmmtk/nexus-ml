@@ -1,0 +1,51 @@
+{
+    "family": "__FAMILY_NAME__",
+    "containerDefinitions": [
+        {
+            "name": "api",
+            "image": "074412166484.dkr.ecr.eu-central-1.amazonaws.com/nexusml-api:latest",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 8000,
+                    "hostPort": 8000,
+                    "protocol": "tcp",
+                    "name": "api-8000-tcp",
+                    "appProtocol": "http"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "AWS_BUCKET_NAME",
+                    "value": "nexus-ml-models-maksymmmtk"
+                },
+                {
+                    "name": "MODEL_NAME",
+                    "value": "__MODEL_NAME__"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/__FAMILY_NAME__",
+                    "awslogs-create-group": "true",
+                    "awslogs-region": "eu-central-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ],
+    "taskRoleArn": "arn:aws:iam::074412166484:role/NexusML-Task-Role",
+    "executionRoleArn": "arn:aws:iam::074412166484:role/NexusML-Task-Role",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "512",
+    "memory": "1024",
+    "runtimePlatform": {
+        "cpuArchitecture": "X86_64",
+        "operatingSystemFamily": "LINUX"
+    }
+}
