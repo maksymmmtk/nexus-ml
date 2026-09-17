@@ -1,9 +1,9 @@
 import os
 import sys
 import boto3
+import zipfile
 from botocore.exceptions import NoCredentialsError
 
-# Environment variables will be automatically loaded by Docker from the .env file
 BUCKET_NAME = os.getenv("AWS_BUCKET_NAME")
 REGION = os.getenv("AWS_DEFAULT_REGION", "eu-central-1")
 LOCAL_STAGING_DIR = os.path.join("scripts", "staging")
@@ -16,21 +16,21 @@ s3 = boto3.client('s3', region_name=REGION)
 def upload_staging():
     print(f"Uploading local models to S3 ({STAGING_PREFIX})...")
     if not os.path.exists(LOCAL_STAGING_DIR):
-        print("Warning: Local staging directory is empty. Run scripts/train_model.py first.")
+        print("Warning: Local staging directory is empty.")
         return
 
     uploaded = 0
     for filename in os.listdir(LOCAL_STAGING_DIR):
-        if filename.endswith('.onnx') or filename.endswith('.json'):
+        if filename.endswith('.zip'):
             local_path = os.path.join(LOCAL_STAGING_DIR, filename)
             s3_key = f"{STAGING_PREFIX}{filename}"
             s3.upload_file(local_path, BUCKET_NAME, s3_key)
-            print(f"  - Uploaded to staging: {s3_key}")
+            print(f"  - Uploaded archive to staging: {s3_key}")
             uploaded += 1
-    print(f"Successfully uploaded {uploaded} files.\n")
+    print(f"Successfully uploaded {uploaded} archives.\n")
 
 def download_staging():
-    print(f"CI/CD Stage 1: Downloading models from S3 ({STAGING_PREFIX}) for local testing...")
+    print(f"CI/CD Stage 1: Downloading model archives (.zip) from S3 ({STAGING_PREFIX})...")
     os.makedirs(LOCAL_STAGING_DIR, exist_ok=True)
     
     response = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=STAGING_PREFIX)
@@ -41,18 +41,26 @@ def download_staging():
     downloaded = 0
     for obj in response['Contents']:
         file_key = obj['Key']
-        if file_key.endswith('/') or not (file_key.endswith('.onnx') or file_key.endswith('.json')):
+        if file_key.endswith('/') or not file_key.endswith('.zip'):
             continue
         
         filename = os.path.basename(file_key)
-        local_path = os.path.join(LOCAL_STAGING_DIR, filename)
-        s3.download_file(BUCKET_NAME, file_key, local_path)
-        print(f"  - Downloaded for testing: {filename}")
+        local_zip_path = os.path.join(LOCAL_STAGING_DIR, filename)
+        
+        s3.download_file(BUCKET_NAME, file_key, local_zip_path)
+        print(f"  - Downloaded archive: {filename}")
+        
+        with zipfile.ZipFile(local_zip_path, 'r') as zip_ref:
+            zip_ref.extractall(LOCAL_STAGING_DIR)
+        print(f"  - Extracted: {filename}")
+        
+        os.remove(local_zip_path)
         downloaded += 1
-    print(f"Successfully downloaded {downloaded} files.\n")
+        
+    print(f"Successfully downloaded and extracted {downloaded} archives.\n")
 
 def promote_to_production():
-    print(f"CI/CD Stage 2: Promoting validated models to production S3 ({PROD_PREFIX}) and cleaning up staging...")
+    print(f"CI/CD Stage 2: Promoting validated models to production ({PROD_PREFIX}) and cleaning up staging...")
     if not os.path.exists(LOCAL_STAGING_DIR):
         print("Warning: Local staging directory is empty. Nothing to promote.")
         return
@@ -62,19 +70,19 @@ def promote_to_production():
         if filename.endswith('.onnx') or filename.endswith('.json'):
             local_path = os.path.join(LOCAL_STAGING_DIR, filename)
             s3_prod_key = f"{PROD_PREFIX}{filename}"
-            s3_staging_key = f"{STAGING_PREFIX}{filename}"
             
-            # 1. Upload to production
             s3.upload_file(local_path, BUCKET_NAME, s3_prod_key)
             print(f"  - Deployed to prod: {s3_prod_key}")
-            
-            # 2. Delete from staging
-            s3.delete_object(Bucket=BUCKET_NAME, Key=s3_staging_key)
-            print(f"  - Cleaned up from staging: {s3_staging_key}")
-            
             promoted += 1
             
-    print(f"Successfully promoted and cleaned up {promoted} files.\n")
+    response = s3.list_objects_v2(Bucket=BUCKET_NAME, Prefix=STAGING_PREFIX)
+    if 'Contents' in response:
+        for obj in response['Contents']:
+            if obj['Key'].endswith('.zip'):
+                s3.delete_object(Bucket=BUCKET_NAME, Key=obj['Key'])
+                print(f"  - Cleaned up from staging: {obj['Key']}")
+            
+    print(f"Successfully promoted {promoted} files and cleaned up staging archives.\n")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

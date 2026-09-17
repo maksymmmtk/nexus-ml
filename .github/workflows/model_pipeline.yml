@@ -25,11 +25,11 @@ jobs:
         env:
           AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
         run: |
-          FILES=$(aws s3api list-objects-v2 --bucket $AWS_BUCKET_NAME --prefix staging/ --query "Contents[?ends_with(Key, '.onnx')].Key" --output text)
+          FILES=$(aws s3api list-objects-v2 --bucket $AWS_BUCKET_NAME --prefix staging/ --query "Contents[?ends_with(Key, '.zip')].Key" --output text)
           if [ "$FILES" == "None" ] || [ -z "$FILES" ]; then
             echo "models=[]" >> $GITHUB_OUTPUT
           else
-            MODELS=$(echo "$FILES" | tr '\t' '\n' | sed 's/staging\///g' | sed 's/_model\.onnx//g' | sed 's/\.onnx//g')
+            MODELS=$(echo "$FILES" | tr '\t' '\n' | sed 's/staging\///g' | sed 's/\.zip//g' | sed 's/_model//g')
             JSON_ARRAY=$(echo "$MODELS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
             echo "models=$JSON_ARRAY" >> $GITHUB_OUTPUT
           fi
