@@ -137,7 +137,7 @@ jobs:
           container-name: api
           image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
-            - name: Register Task Def and Create Service if not exists
+      - name: Register Task Def and Create Service if not exists
         run: |
           SERVICE_NAME="nexusml-api-${{ matrix.model_name }}-service"
           FAMILY_NAME="nexusml-api-${{ matrix.model_name }}"
@@ -159,7 +159,7 @@ jobs:
               --network-configuration "awsvpcConfiguration={subnets=[subnet-05b51248c23c0fe2c,subnet-0253e574f45955295,subnet-070badba59fd05cd8],securityGroups=[sg-0cafc2af14168a4b1],assignPublicIp=ENABLED}"
           else
             echo "Service exists ($STATUS). Skipping creation, handing over to deploy action..."
-          fi
+          fi      
 
       - name: Deploy Service to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
