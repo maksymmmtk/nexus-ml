@@ -6,3 +6,15 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+
+  - job_name: 'nexusml-models'
+    ecs_sd_configs:
+      - region: eu-central-1
+        cluster: nexusml-cluster
+        port: 8000
+    relabel_configs:
+      - source_labels: [__meta_ecs_container_name]
+        action: keep
+        regex: api
+      - source_labels: [__meta_ecs_task_definition_family]
+        target_label: model_family
