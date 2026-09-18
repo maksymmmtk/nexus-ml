@@ -12,11 +12,13 @@ scrape_configs:
       - region: eu-central-1
         port: 8000
     relabel_configs:
-      - source_labels: [__meta_ecs_cluster_name]
+      - source_labels: [__meta_ecs_cluster]
         action: keep
-        regex: '.*nexusml-cluster.*'
-      - source_labels: [__meta_ecs_container_name]
+        regex: 'nexusml-cluster'
+      - source_labels: [__meta_ecs_service]
         action: keep
-        regex: '^api$'
-      - source_labels: [__meta_ecs_task_definition_family]
+        regex: '^nexusml-api-.*'
+      - source_labels: [__meta_ecs_service]
+        regex: '^nexusml-api-(.*)-service$'
         target_label: model_family
+        replacement: '$1'
