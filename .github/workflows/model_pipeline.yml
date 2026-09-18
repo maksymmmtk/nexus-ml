@@ -144,25 +144,35 @@ jobs:
           STATUS=$(aws ecs describe-services --cluster $CLUSTER --services $SERVICE_NAME --query "services[0].status" --output text)
           
           if [ "$STATUS" == "None" ] || [ "$STATUS" == "INACTIVE" ]; then
-            echo "Service $SERVICE_NAME does not exist. Creating automatically..."
+            echo "Service $SERVICE_NAME does not exist. Configuring Service Discovery..."
+            
+            NAMESPACE_ID=$(aws servicediscovery list-namespaces --query "Namespaces[?Name=='nexusml.local'].Id" --output text)
+            
+            REGISTRY_ARN=$(aws servicediscovery list-services --filters Name=NAMESPACE_ID,Values=$NAMESPACE_ID,Condition=EQ --query "Services[?Name=='${{ matrix.model_name }}'].Arn" --output text)
+            
+            if [ -z "$REGISTRY_ARN" ] || [ "$REGISTRY_ARN" == "None" ]; then
+              echo "Creating Cloud Map record for ${{ matrix.model_name }}..."
+              REGISTRY_ARN=$(aws servicediscovery create-service \
+                --name "${{ matrix.model_name }}" \
+                --namespace-id "$NAMESPACE_ID" \
+                --dns-config "NamespaceId=$NAMESPACE_ID,RoutingPolicy=MULTIVALUE,DnsRecords=[{Type=A,TTL=60}]" \
+                --health-check-custom-config FailureThreshold=1 \
+                --query 'Service.Arn' --output text)
+              sleep 5
+            fi
+
+            echo "Creating ECS Service with Service Discovery..."
             aws ecs create-service \
               --cluster $CLUSTER \
               --service-name $SERVICE_NAME \
               --task-definition $TASK_DEF_ARN \
               --desired-count 1 \
               --launch-type FARGATE \
-              --network-configuration "awsvpcConfiguration={subnets=[subnet-05b51248c23c0fe2c,subnet-0253e574f45955295,subnet-070badba59fd05cd8],securityGroups=[sg-0cafc2af14168a4b1],assignPublicIp=ENABLED}"
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-05b51248c23c0fe2c,subnet-0253e574f45955295,subnet-070badba59fd05cd8],securityGroups=[sg-0cafc2af14168a4b1],assignPublicIp=ENABLED}" \
+              --service-registries "registryArn=$REGISTRY_ARN,containerName=api,containerPort=8000"
           else
             echo "Service exists ($STATUS). Skipping creation, handing over to deploy action..."
           fi
-
-      - name: Deploy Service to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: nexusml-api-${{ matrix.model_name }}-service
-          cluster: nexusml-cluster
-          wait-for-service-stability: true
 
       - name: Send Deployment Email Notification
         if: always()

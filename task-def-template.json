@@ -23,6 +23,10 @@
                 {
                     "name": "MODEL_NAME",
                     "value": "__MODEL_NAME__"
+                },
+                {
+                    "name": "REDIS_URL",
+                    "value": "redis://redis.nexusml.local:6379"
                 }
             ],
             "logConfiguration": {
