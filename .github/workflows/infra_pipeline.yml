@@ -95,7 +95,7 @@ jobs:
               --task-definition $TASK_DEF_ARN \
               --desired-count 1 \
               --launch-type FARGATE \
-              --network-configuration "awsvpcConfiguration={subnets=[subnet-05b51248c23c0fe2c,subnet-0253e574f45955295,subnet-070badba59fd05cd8],securityGroups=[sg-0cafc2af14168a4b1],assignPublicIp=ENABLED}" \
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-05b51248c23c0fe2c,subnet-0253e574f45955295,subnet-070badba59fd05cd8],securityGroups=[sg-06c342808c055be99],assignPublicIp=ENABLED}" \
               --service-registries "registryArn=$REGISTRY_ARN"
           else
             echo "Service exists ($STATUS). Skipping creation, handing over to deploy action..."
