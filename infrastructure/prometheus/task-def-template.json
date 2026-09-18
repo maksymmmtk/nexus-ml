@@ -1,0 +1,39 @@
+{
+    "family": "nexusml-prometheus",
+    "containerDefinitions": [
+        {
+            "name": "prometheus",
+            "image": "PLACEHOLDER",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 9090,
+                    "hostPort": 9090,
+                    "protocol": "tcp",
+                    "name": "prometheus-9090-tcp",
+                    "appProtocol": "http"
+                }
+            ],
+            "essential": true,
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/nexusml-prometheus",
+                    "awslogs-create-group": "true",
+                    "awslogs-region": "eu-central-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ],
+    "taskRoleArn": "arn:aws:iam::074412166484:role/NexusML-Prometheus-Task-Role",
+    "executionRoleArn": "arn:aws:iam::074412166484:role/NexusML-Task-Role",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "256",
+    "memory": "512",
+    "runtimePlatform": {
+        "cpuArchitecture": "X86_64",
+        "operatingSystemFamily": "LINUX"
+    }
+}
