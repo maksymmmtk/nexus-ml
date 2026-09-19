@@ -3,6 +3,7 @@ venv/
 __pycache__/
 *.pyc
 .env
+downloaded_models/
 
 # Ignore staging models/manifests and training script
 scripts/staging/

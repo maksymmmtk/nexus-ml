@@ -1,7 +1,7 @@
 services:
   api:
     build: .
-    container_name: nexusml_api_${MODEL_ID}
+    container_name: nexusml_api_${MODEL_ID:-local}
     ports:
       - "8001:8000"
     depends_on:
@@ -9,7 +9,7 @@ services:
     env_file:
       - .env
     environment:
-      - MODEL_NAME=${MODEL_FILE_NAME}
+      - MODEL_NAME=${MODEL_FILE_NAME:-test_model}
 
   redis:
     image: redis:7-alpine
@@ -23,7 +23,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     depends_on:
       - api
 
@@ -38,7 +38,8 @@ services:
       - prometheus
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards
 
 volumes:
   grafana_data:
