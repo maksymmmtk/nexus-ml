@@ -17,7 +17,7 @@ from app.schemas import PredictRequest
 from app.cache import get_cache_key
 from app.model_loader import download_model_from_s3
 from app.ml_service import InferenceService
-from main import app
+from app.main import app
 
 
 # 2. Module Tests: Schemas
@@ -110,9 +110,9 @@ def test_ml_service_uninitialized():
 # Fixture to mock dependencies during the FastAPI lifespan and endpoints
 @pytest.fixture
 def mock_app_dependencies():
-    with patch("main.download_model_from_s3") as mock_download, \
-         patch("main.ml_service") as mock_ml, \
-         patch("main.redis_client") as mock_redis:
+    with patch("app.main.download_model_from_s3") as mock_download, \
+         patch("app.main.ml_service") as mock_ml, \
+         patch("app.main.redis_client") as mock_redis:
          
         # Simulate successful model download and initialization
         mock_download.return_value = ("dummy.onnx", "dummy.json")
@@ -176,7 +176,11 @@ def test_predict_redis_down(mock_app_dependencies):
         mock_ml.predict.assert_called_once()
 
 def test_predict_validation_error(mock_app_dependencies):
-    _, mock_ml, _ = mock_app_dependencies
+    _, mock_ml, mock_redis = mock_app_dependencies
+    
+    # Force a cache miss so the API proceeds to the inference stage
+    mock_redis.get.return_value = None
+    
     # Simulate ML service rejecting feature count
     mock_ml.predict.side_effect = ValueError("Expected 3 features, got 2")
 
@@ -187,7 +191,11 @@ def test_predict_validation_error(mock_app_dependencies):
         assert "Expected 3 features" in response.json()["detail"]
 
 def test_predict_internal_error(mock_app_dependencies):
-    _, mock_ml, _ = mock_app_dependencies
+    _, mock_ml, mock_redis = mock_app_dependencies
+    
+    # Force a cache miss so the API proceeds to the inference stage
+    mock_redis.get.return_value = None
+    
     # Simulate internal ONNX crash
     mock_ml.predict.side_effect = Exception("ONNX Core Fault")
 
@@ -230,7 +238,7 @@ def test_health_check_model_not_loaded(mock_app_dependencies):
 # 7. Lifespan Startup Failure Tests
 def test_lifespan_s3_failure():
     # Temporarily remove mocked dependencies to test raw startup behavior
-    with patch("main.download_model_from_s3") as mock_download:
+    with patch("app.main.download_model_from_s3") as mock_download:
         mock_download.return_value = (None, None)
         
         # TestClient triggers lifespan automatically on init
