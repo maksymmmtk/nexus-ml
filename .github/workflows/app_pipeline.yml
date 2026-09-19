@@ -97,7 +97,7 @@ jobs:
           if [ "$FILES" == "None" ] || [ -z "$FILES" ]; then
             echo "models=[]" >> $GITHUB_OUTPUT
           else
-            MODELS=$(echo "$FILES" | tr '\t' '\n' | sed 's/production\///g' | sed 's/_model\.onnx//g' | sed 's/\.onnx//g')
+            MODELS=$(echo "$FILES" | tr '\t' '\n' | sed 's/production\///g' | sed 's/\.onnx//g')
             JSON_ARRAY=$(echo "$MODELS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
             echo "models=$JSON_ARRAY" >> $GITHUB_OUTPUT
           fi
@@ -126,7 +126,7 @@ jobs:
 
       - name: Inject Dynamic Values into Task Definition
         run: |
-          sed "s/__MODEL_NAME__/${{ matrix.model_name }}_model.onnx/g" task-def-template.json > task-def.json
+          sed "s/__MODEL_NAME__/${{ matrix.model_name }}/g" task-def-template.json > task-def.json
           sed -i "s/__FAMILY_NAME__/nexusml-api-${{ matrix.model_name }}/g" task-def.json
 
       - name: Render Task Def
