@@ -69,7 +69,8 @@ def promote_to_production():
     for filename in os.listdir(LOCAL_STAGING_DIR):
         if filename.endswith('.onnx') or filename.endswith('.json'):
             local_path = os.path.join(LOCAL_STAGING_DIR, filename)
-            s3_prod_key = f"{PROD_PREFIX}{filename}"
+            model_base_name = os.path.splitext(filename)[0]
+            s3_prod_key = f"{PROD_PREFIX}{model_base_name}/{filename}"
             
             s3.upload_file(local_path, BUCKET_NAME, s3_prod_key)
             print(f"  - Deployed to prod: {s3_prod_key}")

@@ -93,11 +93,11 @@ jobs:
         env:
           AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
         run: |
-          FILES=$(aws s3api list-objects-v2 --bucket $AWS_BUCKET_NAME --prefix production/ --query "Contents[?ends_with(Key, '.onnx')].Key" --output text)
-          if [ "$FILES" == "None" ] || [ -z "$FILES" ]; then
+          PREFIXES=$(aws s3api list-objects-v2 --bucket $AWS_BUCKET_NAME --prefix production/ --delimiter '/' --query 'CommonPrefixes[].Prefix' --output text)
+          if [ "$PREFIXES" == "None" ] || [ -z "$PREFIXES" ]; then
             echo "models=[]" >> $GITHUB_OUTPUT
           else
-            MODELS=$(echo "$FILES" | tr '\t' '\n' | sed 's/production\///g' | sed 's/\.onnx//g')
+            MODELS=$(echo "$PREFIXES" | tr '\t' '\n' | tr ' ' '\n' | sed 's/production\///g' | sed 's/\///g')
             JSON_ARRAY=$(echo "$MODELS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
             echo "models=$JSON_ARRAY" >> $GITHUB_OUTPUT
           fi

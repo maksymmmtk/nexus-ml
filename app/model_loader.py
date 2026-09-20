@@ -30,10 +30,13 @@ def download_model_from_s3(model_base_name: str) -> tuple[str | None, str | None
     model_local_path = os.path.join(MODELS_DIR, model_file)
     manifest_local_path = os.path.join(MODELS_DIR, manifest_file)
 
+    s3_model_key = f"{PROD_PREFIX}{model_base_name}/{model_file}"
+    s3_manifest_key = f"{PROD_PREFIX}{model_base_name}/{manifest_file}"
+
     try:
         logger.info(f"Downloading {model_file} and {manifest_file} from S3 {PROD_PREFIX}...")
-        s3.download_file(BUCKET_NAME, f"{PROD_PREFIX}{model_file}", model_local_path)
-        s3.download_file(BUCKET_NAME, f"{PROD_PREFIX}{manifest_file}", manifest_local_path)
+        s3.download_file(BUCKET_NAME, s3_model_key, model_local_path)
+        s3.download_file(BUCKET_NAME, s3_manifest_key, manifest_local_path)
         return model_local_path, manifest_local_path
     except ClientError as e:
         logger.error(f"AWS S3 download error for model {model_base_name}: {e}")
