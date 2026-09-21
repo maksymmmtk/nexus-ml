@@ -4,11 +4,11 @@ High-performance, Cloud-Native platform for deploying and monitoring machine lea
 
 ## Key Features
 
-*   **Dynamic Model Scaling:** Automated parsing of S3 buckets paired with GitHub Actions Matrix to parallel-deploy independent microservices for every single ML model.
-*   **Fail-Fast Architecture:** Models are loaded directly into RAM during container startup (FastAPI Lifespan). The container refuses incoming traffic until the model is fully initialized and verified.
+*   **Dynamic Model Scaling (IaC):** Automated parsing of S3 buckets paired with GitHub Actions Matrix to parallel-deploy independent microservices for every single ML model.
+*   **Fail-Fast Architecture & Graceful Degradation:** Models are loaded directly into RAM during container startup (FastAPI Lifespan). The container refuses incoming traffic until the model is fully initialized. The system also supports graceful degradation, remaining operational even if the Redis cache drops.
 *   **Inference Optimization:** Powered by ONNX Runtime for ultra-fast predictions, heavily optimized with **Redis** caching (using SHA-256 hashing for input features).
-*   **Advanced Monitoring:** Automated Service Discovery via AWS Cloud Map. Seamless collection of "Golden Signals" (Latency, Error Rate, Traffic) and Cache Hit Rate using **Prometheus** and **Grafana**.
-*   **ML Validation Pipeline:** Automated testing for new models (Tensor Shape, Accuracy, Latency) in a staging environment prior to automatic promotion to production.
+*   **Advanced Monitoring:** Automated Service Discovery via AWS Cloud Map and ECS API. Seamless collection of "Golden Signals" (Latency, Error Rate, Traffic) and custom Cache Hit Rates using **Prometheus** and **Grafana**.
+*   **Automated Alerting:** Real-time Email notifications and Markdown summaries for all CI/CD deployments and model validation results.
 
 ## Infrastructure Architecture
 
@@ -24,7 +24,7 @@ The project consists of four primary microservices deployed within an AWS ECS cl
 
 ```text
 .
-├── .github/workflows/       # CI/CD Pipelines (App, Model, Infra)
+├── .github/workflows/       # CI/CD Pipelines (App, Model, Infra) with Email Alerting
 ├── app/                     # FastAPI application source code
 │   ├── main.py              # Entry point, Lifespan events, Endpoints
 │   ├── ml_service.py        # ONNX inference logic
@@ -35,12 +35,12 @@ The project consists of four primary microservices deployed within an AWS ECS cl
 │   ├── grafana/             # Dashboards (Golden Signals) and Datasources
 │   ├── prometheus/          # Metrics collection rules (Service Discovery)
 │   └── redis/               # In-memory caching setup
-├── scripts/                 # Utility scripts (S3 Sync, Training)
+├── scripts/                 # Utility scripts (S3 Sync, Pipeline automation)
 ├── tests/                   # Pytest suites (Coverage > 94%)
 ├── docker-compose.yml       # Local development environment
 ├── Dockerfile               # Production image configuration for FastAPI
 ├── requirements.txt         # Python package dependencies
-└── task-def-template.json   # AWS ECS Task Definition template for dynamic deployment
+└── task-def-template.json   # AWS ECS Task Definition template for dynamic injection dynamic deployment
 ```
 
 ## CI/CD Pipelines (GitHub Actions)
@@ -48,18 +48,20 @@ The project consists of four primary microservices deployed within an AWS ECS cl
 The project utilizes a decoupled pipeline strategy for maximum flexibility:
 
 *   **app_pipeline.yml (App CI/CD):**
-Triggered on changes in app/ or tests/. Runs linting (Flake8), executes Pytest suites, builds the API Docker image, pushes it to Amazon ECR, dynamically scans production/ in S3, and updates all corresponding ECS services in parallel.
+Triggered on changes in `app/` or `tests/`. Runs linting (Flake8), executes Pytest suites, builds the API Docker image, pushes it to Amazon ECR, dynamically scans `production/` in S3, and updates all corresponding ECS services in parallel using a Matrix strategy.
 
 *   **model_pipeline.yml (Model Promotion):**
-Triggered manually (Workflow Dispatch). Downloads .zip archives from S3 (staging/), runs validation tests (Accuracy, Latency constraints), promotes validated models to production/, and orchestrates ECS container updates via AWS Cloud Map.
+Triggered automatically via AWS Lambda Webhook (workflow_dispatch) when a new archive is uploaded to S3. Downloads `.zip` archives from S3 (`staging/`), runs strict validation tests (Tensor Shape, Accuracy tolerance, Latency constraints), promotes validated models to `production/`, and orchestrates ECS container updates.
 
 *   **infra_pipeline.yml (Infra CI/CD):**
-Manages core underlying services (Redis, Prometheus, Grafana). Automatically registers them into AWS Service Discovery.
+Manages core underlying services (Redis, Prometheus, Grafana). Automatically builds infrastructure images and registers them into AWS Service Discovery (Cloud Map).
+
+*All pipelines automatically generate GitHub Step Summaries and send status Email notifications upon completion.*
 
 ## API Endpoints
 
 ### **GET /health**
-Returns the readiness status of the service (checks if the model is loaded in memory and Redis is reachable). Primarily used by the AWS Application Load Balancer.\
+Returns the readiness status of the service (checks if the model is loaded in memory and Redis is reachable). Primarily used by the AWS Application Load Balancer. Dynamically shifts to `"status": "degraded"` if caching layers fail, while keeping the API alive.\
 **Example Response:**
 
 ```json
@@ -75,7 +77,7 @@ Returns the readiness status of the service (checks if the model is loaded in me
 ```
 
 ### **POST /predict**
-Executes an inference prediction based on the provided input features.\
+Executes an inference prediction based on the provided input features. Validated strictly via Pydantic schemas.\
 **Example Request:**
 
 ```json
@@ -120,4 +122,4 @@ The platform features an auto-provisioned Golden Signals dashboard that tracks:
 
 5) **Cache Hit Rate:** Operational efficiency of the Redis caching layer.
 
-The dashboard supports dynamic filtering for individual active models via the $model variable dropdown.
+The dashboard supports dynamic filtering for individual active models via the `$model` variable dropdown.
