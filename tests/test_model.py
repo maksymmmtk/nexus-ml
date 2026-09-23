@@ -4,8 +4,6 @@ import time
 import pytest
 import onnxruntime as ort
 import numpy as np
-import pandas as pd
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, r2_score
 
 MODELS_DIR = os.getenv("MODELS_DIR", "./scripts/staging")
 
@@ -59,13 +57,17 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("model_path, config", get_model_test_cases())
 def test_model_validation_pipeline(model_path, config):
+    # Import heavy libraries only within the test to avoid errors in app_pipeline
+    import pandas as pd
+    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, r2_score
+
     session = ort.InferenceSession(model_path)
     inputs = session.get_inputs()
     input_name = inputs[0].name
 
     actual_features = inputs[0].shape[1]
     expected_features = config["expected_features"]
-    
+
     assert actual_features == expected_features, \
         f"{model_path}: Expected {expected_features} features, recieved {actual_features}"
 
@@ -73,13 +75,13 @@ def test_model_validation_pipeline(model_path, config):
     dataset_file = config.get("test_dataset")
     dataset_path = os.path.join(MODELS_DIR, dataset_file)
     assert os.path.exists(dataset_path), f"Dataset file {dataset_file} not found."
-    
+
     df = pd.read_csv(dataset_path)
     target_col = config.get("target_column", "target")
     y_true = df[target_col].values
     X_test = df.drop(columns=[target_col]).values.astype(np.float32)
 
-    # 2. Batch Inference) and speed measurement
+    # 2. Batch Inference and speed measurement
     start_time = time.time()
     result = session.run(None, {input_name: X_test})
     end_time = time.time()
@@ -87,7 +89,7 @@ def test_model_validation_pipeline(model_path, config):
     num_samples = len(X_test)
     avg_latency_ms = ((end_time - start_time) / num_samples) * 1000
     max_latency = float(config.get("max_latency_ms", 50.0))
-    
+
     raw_predictions = result[0]
     task_type = config.get("task_type", "classification")
     metrics_result = {}
@@ -100,15 +102,15 @@ def test_model_validation_pipeline(model_path, config):
             y_pred = np.argmax(raw_predictions, axis=1) # Multiclass
         else:
             y_pred = (raw_predictions.flatten() > 0.5).astype(int) # Binary
-        
+
         acc = accuracy_score(y_true, y_pred)
         prec = precision_score(y_true, y_pred, average='weighted', zero_division=0)
         rec = recall_score(y_true, y_pred, average='weighted', zero_division=0)
         f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
-        
+
         min_f1 = float(config.get("min_f1_score", 0.80))
         is_metrics_pass = f1 >= min_f1
-        
+
         metrics_result = {
             "Accuracy": (acc, None, True),
             "Precision": (prec, None, True),
@@ -118,11 +120,11 @@ def test_model_validation_pipeline(model_path, config):
     elif task_type == "regression":
         y_pred = raw_predictions.flatten()
         r2 = r2_score(y_true, y_pred)
-        
+
         # For regression we can specify min_r2_score in manifest (or accept the default of 0.5)
         min_r2 = float(config.get("min_r2_score", 0.50))
         is_metrics_pass = r2 >= min_r2
-        
+
         metrics_result = {
             "R2-Score": (r2, min_r2, is_metrics_pass)
         }
@@ -130,7 +132,7 @@ def test_model_validation_pipeline(model_path, config):
     # 4. Report record
     model_name = os.path.basename(model_path)
     write_github_summary(
-        model_name, expected_features, actual_features, 
+        model_name, expected_features, actual_features,
         metrics_result, avg_latency_ms, max_latency
     )
 
