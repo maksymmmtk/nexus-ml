@@ -7,4 +7,3 @@ downloaded_models/
 
 # Ignore staging models/manifests and training script
 scripts/staging/
-scripts/train_model.py

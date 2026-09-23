@@ -67,11 +67,19 @@ def promote_to_production():
 
     promoted = 0
     for filename in os.listdir(LOCAL_STAGING_DIR):
+        # IGNORE.csv files during copying to production
         if filename.endswith('.onnx') or filename.endswith('.json'):
             local_path = os.path.join(LOCAL_STAGING_DIR, filename)
-            model_base_name = os.path.splitext(filename)[0]
-            s3_prod_key = f"{PROD_PREFIX}{model_base_name}/{filename}"
+            model_base_name = os.path.splitext(filename)[0].replace(".json", "") # Handle json names safely
             
+            # If it is JSON, need to remove the .json extension before adding the folder
+            if filename.endswith('.json'):
+                model_base_name = filename.replace(".json", "")
+            elif filename.endswith('.onnx'):
+                 model_base_name = filename.replace(".onnx", "")
+                 
+            s3_prod_key = f"{PROD_PREFIX}{model_base_name}/{filename}"
+
             s3.upload_file(local_path, BUCKET_NAME, s3_prod_key)
             print(f"  - Deployed to prod: {s3_prod_key}")
             promoted += 1
