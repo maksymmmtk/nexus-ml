@@ -26,8 +26,8 @@ def write_github_summary(model_name: str, exp_feat: int, act_feat: int, metrics:
     report = f"""### Test Report: `{model_name}`
 | Metric | Value | Status |
 |--------|-------|--------|
-| **Schema Validation** | Expected: {exp_f} | {status_schema} |
-{metrics_rows}| **Avg Latency/Item** | {lat:.2f} ms | {status_lat} |
+| **Schema Validation** | Expected: {exp_feat} | {status_schema} |
+{metrics_rows}| **Avg Latency/Item** | {latency:.2f} ms | {status_lat} |
 
 ---
 """
