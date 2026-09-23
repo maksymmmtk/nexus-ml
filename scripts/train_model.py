@@ -3,7 +3,7 @@ import os
 import pandas as pd
 from sklearn.datasets import (
     load_breast_cancer,
-    load_diabetes,
+    fetch_california_housing,
     load_digits,
     load_iris,
     load_wine,
@@ -91,13 +91,13 @@ if __name__ == "__main__":
         feature_names=cancer.feature_names
     )
     
-    diabetes = load_diabetes()
+    california = fetch_california_housing()
     train_export_and_manifest(
         GradientBoostingRegressor(random_state=42),
-        diabetes.data,
-        diabetes.target,
-        "diabetes_regression_model.onnx",
-        feature_names=diabetes.feature_names,
+        california.data,
+        california.target,
+        "california_regression_model.onnx",
+        feature_names=california.feature_names,
         is_regression=True,
     )
     
